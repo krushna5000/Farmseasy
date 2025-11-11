@@ -16,6 +16,7 @@ const pool = new Pool({
   ssl: false,
 });
 
+
 export default {
   query: (text, params) => pool.query(text, params),
   pool
