@@ -1,7 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
 import authRoutes from "./routes/auth.routes.js";
-console.log("PASSWORD from env = ", process.env.DB_PASSWORD);
 
 
 dotenv.config({ path: '../.env' });
