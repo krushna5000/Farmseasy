@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config({ path: './.env' });
-// console.log("✅ Loaded Password =>", process.env.DB_PASSWORD);
+
 
 
 
@@ -10,8 +10,8 @@ const { Pool } = pkg;
 const pool = new Pool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT) || 5432,
-  user: process.env.DB_USER,  // ✅ REQUIRED
-  password: String(process.env.DB_PASSWORD), // ensure it's a string
+  user: process.env.DB_USER,
+  password: String(process.env.DB_PASSWORD),
   database: process.env.DB_NAME,
   ssl: false,
 });

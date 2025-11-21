@@ -4,9 +4,134 @@ import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
-router.post("/send-otp", async (req, res) => {
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+
+
+router.post("/register/send-otp", async (req, res) => {
   try {
     const { phone_number, full_name } = req.body;
+
+    if (!phone_number || !full_name?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "full name required for new user"
+      });
+    }
+
+    
+    const userResult = await db.query(
+      "SELECT * FROM users_schema.users WHERE phone_number=$1",
+      [phone_number]
+    );
+
+    if (userResult.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists, please login instead"
+      });
+    }
+
+    
+    await db.query(
+      `INSERT INTO users_schema.users (full_name, phone_number, is_verified)
+       VALUES ($1, $2, false)`,
+      [full_name.trim(), phone_number]
+    );
+
+    
+    const otp = generateOTP();
+    const expires_at = new Date(Date.now() + 5 * 60 * 1000); // 5 min validity
+
+    await db.query(
+      `INSERT INTO users_schema.otp_verifications (phone_number, otp_code, expires_at)
+       VALUES ($1, $2, $3)`,
+      [phone_number, otp, expires_at]
+    );
+
+    console.log(`✅ Registration OTP for ${phone_number}: ${otp}`);
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent for registration"
+    });
+  } catch (error) {
+    console.error("Error in /register/send-otp:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+
+router.post("/register/verify-otp", async (req, res) => {
+  try {
+    const { phone_number, otp } = req.body;
+
+    if (!phone_number || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "phone_number and otp are required"
+      });
+    }
+
+  
+    const otpResult = await db.query(
+      `SELECT * FROM users_schema.otp_verifications
+       WHERE phone_number=$1 AND otp_code=$2 AND is_used=false AND expires_at > NOW()
+       ORDER BY id DESC LIMIT 1`,
+      [phone_number, otp]
+    );
+
+    if (otpResult.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP"
+      });
+    }
+
+    const otpRow = otpResult.rows[0];
+
+    
+    await db.query(`UPDATE users_schema.otp_verifications SET is_used=true WHERE id=$1`, [otpRow.id]);
+
+    
+    await db.query(
+      `UPDATE users_schema.users SET is_verified=true, updated_at=NOW() WHERE phone_number=$1`,
+      [phone_number]
+    );
+
+    
+    const userResult = await db.query(
+      `SELECT * FROM users_schema.users WHERE phone_number=$1`,
+      [phone_number]
+    );
+    const user = userResult.rows[0];
+
+    
+    const token = jwt.sign(
+      { id: user.id, phone_number: user.phone_number, full_name: user.full_name },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Registration completed successfully",
+      token,
+      user
+    });
+  } catch (error) {
+    console.error("Error in /register/verify-otp:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+
+
+
+router.post("/login/send-otp", async (req, res) => {
+  try {
+    const { phone_number } = req.body;
 
     if (!phone_number) {
       return res.status(400).json({
@@ -20,27 +145,15 @@ router.post("/send-otp", async (req, res) => {
       [phone_number]
     );
 
-    const userExists = userResult.rows.length > 0;
-
-    // ✅ NEW USER MUST SEND NAME
-    if (!userExists) {
-      if (!full_name || full_name.trim() === "") {
-        return res.status(400).json({
-          success: false,
-          message: "Full name required for new user"
-        }); // ❗ STOP OTP here
-      }
-
-      // ✅ Insert user after name provided
-      await db.query(
-        `INSERT INTO users_schema.users (full_name, phone_number, is_verified)
-         VALUES ($1, $2, false)`,
-        [full_name.trim(), phone_number]
-      );
+    if (userResult.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "User not found, please register first"
+      });
     }
 
-    // ✅ Generate OTP only AFTER user exists
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    const otp = generateOTP();
     const expires_at = new Date(Date.now() + 5 * 60 * 1000);
 
     await db.query(
@@ -49,19 +162,19 @@ router.post("/send-otp", async (req, res) => {
       [phone_number, otp, expires_at]
     );
 
-    console.log(`✅ OTP for ${phone_number}:`, otp);
+    console.log(`✅ Login OTP for ${phone_number}: ${otp}`);
     return res.status(200).json({
       success: true,
-      message: "OTP sent successfully"
+      message: "OTP sent for login"
     });
-
   } catch (error) {
-    console.error(error);
+    console.error("Error in /login/send-otp:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-router.post("/verify-otp", async (req, res) => {
+
+router.post("/login/verify-otp", async (req, res) => {
   try {
     const { phone_number, otp } = req.body;
 
@@ -87,46 +200,44 @@ router.post("/verify-otp", async (req, res) => {
     }
 
     const otpRow = otpResult.rows[0];
+    await db.query(`UPDATE users_schema.otp_verifications SET is_used=true WHERE id=$1`, [otpRow.id]);
 
-    // Mark OTP as used
-    await db.query(`UPDATE users_schema.otp_verifications SET is_used = true WHERE id=$1`, [otpRow.id]);
+    const userResult = await db.query(
+      `SELECT * FROM users_schema.users WHERE phone_number=$1`,
+      [phone_number]
+    );
 
-    // Get or create user
-    let userResult = await db.query(`SELECT * FROM users_schema.users WHERE phone_number=$1`, [phone_number]);
-    let user;
+    const user = userResult.rows[0];
 
-    if (!userResult.rows.length) {
-      // This shouldn't happen if send-otp inserted the user, but handle it
-      const insert = await db.query(
-        `INSERT INTO users_schema.users(phone_number, is_verified, created_at, updated_at)
-         VALUES ($1, true, NOW(), NOW()) RETURNING *`,
-        [phone_number]
-      );
-      user = insert.rows[0];
-    } else {
-      user = userResult.rows[0];
-      if (!user.is_verified) {
-        await db.query(`UPDATE users_schema.users SET is_verified=true, updated_at=NOW() WHERE id=$1`, [user.id]);
-        user.is_verified = true;
-      }
+    
+    if (!user.is_verified) {
+      await db.query(`UPDATE users_schema.users SET is_verified=true WHERE id=$1`, [user.id]);
+      user.is_verified = true;
     }
 
-    // Generate JWT
     const token = jwt.sign(
-      { id: user.id, phone_number: user.phone_number },
+      { id: user.id, phone_number: user.phone_number, full_name: user.full_name },
       process.env.JWT_SECRET,
       { expiresIn: '30d' }
     );
+   
+res.cookie("token", token, {
+  httpOnly: true,      
+  secure: false,       
+ sameSite: "lax",       
+  path: "/",    
+  maxAge: 30 * 24 * 60 * 60 * 1000, 
+});
+
 
     return res.status(200).json({
       success: true,
-      message: "OTP verified successfully",
+      message: "Login successful",
       token,
       user
     });
-
   } catch (error) {
-    console.error(error);
+    console.error("Error in /login/verify-otp:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
