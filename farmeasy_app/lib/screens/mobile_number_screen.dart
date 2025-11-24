@@ -109,18 +109,18 @@ class _MobileNumberScreenState extends State<MobileNumberScreen>
 
     setState(() => isLoading = true);
     try {
-      // Try to send login OTP for existing user
-      final sent = await AuthService.sendLoginOtp(mobile);
+      // Try to send OTP without fullName to check if user exists
+      final sent = await AuthService.sendOtp(mobile);
       if (sent) {
-        // User exists, go directly to OTP screen for login
+        // User exists, go directly to OTP screen
         Navigator.push(
           context,
-          animatedRoute(OtpScreen(mobile: mobile, isLogin: true)),
+          animatedRoute(OtpScreen(mobile: mobile)),
         );
       }
     } catch (e) {
-      // Check if error is due to user not found
-      if (e.toString().contains("User not found")) {
+      // Check if error is due to new user requiring full name
+      if (e.toString().contains("Full name required for new user")) {
         // New user, go to create account screen
         Navigator.push(
           context,

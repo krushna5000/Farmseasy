@@ -111,10 +111,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
 
     setState(() => isLoading = true);
     try {
-      await AuthService.sendRegisterOtp(widget.mobile, fullName);
+      await AuthService.sendOtp(widget.mobile, fullName: fullName);
       Navigator.push(
         context,
-        animatedRoute(OtpScreen(mobile: widget.mobile, isLogin: false)),
+        animatedRoute(OtpScreen(mobile: widget.mobile)),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

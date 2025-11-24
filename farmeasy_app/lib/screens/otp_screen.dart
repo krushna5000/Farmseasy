@@ -6,8 +6,7 @@ import '../utils/animated_navigator.dart';
 
 class OtpScreen extends StatefulWidget {
   final String mobile;
-  final bool isLogin;
-  const OtpScreen({super.key, required this.mobile, required this.isLogin});
+  const OtpScreen({super.key, required this.mobile});
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -126,7 +125,7 @@ class _OtpScreenState extends State<OtpScreen>
     setState(() => isLoading = true);
 
     try {
-      final result = widget.isLogin ? await AuthService.verifyLoginOtp(widget.mobile, otp) : await AuthService.verifyRegisterOtp(widget.mobile, otp);
+      final result = await AuthService.verifyOtp(widget.mobile, otp);
       // result is Map<String, dynamic> with "token", "user", "message"
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -156,19 +155,15 @@ class _OtpScreenState extends State<OtpScreen>
 
   Future<void> resendOtp() async {
     try {
-      final sent = widget.isLogin
-          ? await AuthService.sendLoginOtp(widget.mobile)
-          : await AuthService.sendRegisterOtp(widget.mobile, ""); // For resend, fullName not needed for login, but for register we might need to handle differently
-      if (sent) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("OTP resent successfully"),
-            backgroundColor: AppTheme.primaryGreen,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      }
+      await AuthService.sendOtp(widget.mobile);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("OTP resent successfully"),
+          backgroundColor: AppTheme.primaryGreen,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
